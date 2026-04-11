@@ -1,0 +1,102 @@
+/* ═══════════════════════════════════════════════════════════════
+   Notifications Component Styles
+   ═══════════════════════════════════════════════════════════════ */
+
+.notifications {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 100;
+  pointer-events: none;
+  max-width: 360px;
+}
+
+.notification {
+  padding: 12px 18px;
+  border-radius: var(--radius-md);
+  font-size: 0.85rem;
+  font-weight: 500;
+  animation: notificationSlideIn 300ms ease-out;
+  pointer-events: auto;
+  cursor: pointer;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+}
+
+.notification--exiting {
+  animation: notificationSlideOut 250ms ease-in forwards;
+}
+
+.notification__icon {
+  font-size: 1.1rem;
+  flex-shrink: 0;
+}
+
+.notification__text {
+  flex: 1;
+}
+
+/* ── Notification Types ── */
+.notification--check {
+  background: rgba(239, 68, 68, 0.15);
+  border-color: rgba(239, 68, 68, 0.4);
+  color: #fca5a5;
+}
+
+.notification--danger {
+  background: rgba(239, 68, 68, 0.2);
+  border-color: rgba(239, 68, 68, 0.5);
+  color: #fecaca;
+}
+
+.notification--life {
+  background: rgba(236, 201, 75, 0.15);
+  border-color: rgba(236, 201, 75, 0.4);
+  color: #fde68a;
+}
+
+.notification--vampirism {
+  background: rgba(16, 185, 129, 0.15);
+  border-color: rgba(16, 185, 129, 0.4);
+  color: #6ee7b7;
+}
+
+.notification--capture {
+  background: rgba(236, 201, 75, 0.15);
+  border-color: rgba(236, 201, 75, 0.4);
+  color: #fde68a;
+}
+
+.notification--promotion {
+  background: rgba(139, 92, 246, 0.2);
+  border-color: rgba(139, 92, 246, 0.5);
+  color: #c4b5fd;
+}
+
+.notification--info {
+  background: rgba(59, 130, 246, 0.15);
+  border-color: rgba(59, 130, 246, 0.4);
+  color: #93c5fd;
+}
+
+.notification--error {
+  background: rgba(239, 68, 68, 0.1);
+  border-color: rgba(239, 68, 68, 0.3);
+  color: #fca5a5;
+}
+
+.notification--gameover {
+  background: rgba(139, 92, 246, 0.2);
+  border-color: rgba(139, 92, 246, 0.5);
+  color: #e9d5ff;
+  font-weight: 700;
+  font-size: 1rem;
+}

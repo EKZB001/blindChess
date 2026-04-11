@@ -1,0 +1,52 @@
+/* ═══════════════════════════════════════════════════════════════
+   Piece Component Styles
+   ═══════════════════════════════════════════════════════════════ */
+
+.piece {
+  font-size: calc(var(--square-size) * 0.65);
+  line-height: 1;
+  user-select: none;
+  cursor: pointer;
+  transition: transform var(--transition-fast), filter var(--transition-fast);
+  position: relative;
+  z-index: 2;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.5));
+}
+
+.piece:hover {
+  transform: scale(1.1);
+  filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.6)) brightness(1.1);
+}
+
+.piece--white {
+  color: #f0e6d3;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+}
+
+.piece--black {
+  color: #2a2a2a;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+  -webkit-text-stroke: 0.5px rgba(255, 255, 255, 0.15);
+}
+
+.piece--observer {
+  animation: observerGlow 3s ease-in-out infinite;
+  color: var(--color-accent-primary);
+}
+
+.piece--observer.piece--black {
+  color: #7c3aed;
+}
+
+.piece--placed {
+  animation: piecePlace 300ms ease-out;
+}
+
+.piece--revealed {
+  animation: fogReveal 500ms ease-out;
+}
+
+.piece--captured {
+  animation: captureVanish 400ms ease-in forwards;
+  pointer-events: none;
+}

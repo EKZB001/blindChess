@@ -1,0 +1,166 @@
+/* ═══════════════════════════════════════════════════════════════
+   GameInfo Component Styles
+   ═══════════════════════════════════════════════════════════════ */
+
+.game-info {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 280px;
+  animation: fadeIn 400ms ease-out;
+}
+
+/* ── Player Panel ── */
+.game-info__player {
+  padding: 16px;
+  border-radius: var(--radius-lg);
+  background: var(--color-bg-card);
+  border: var(--border-subtle);
+  transition: box-shadow var(--transition-normal);
+}
+
+.game-info__player--active {
+  box-shadow: var(--shadow-glow-purple);
+  border-color: rgba(139, 92, 246, 0.3);
+}
+
+.game-info__player-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.game-info__player-name {
+  font-weight: 700;
+  font-size: 0.95rem;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.game-info__player-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.game-info__player-dot--white {
+  background: #f0e6d3;
+}
+
+.game-info__player-dot--black {
+  background: #4a4a4a;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+/* ── Lives Display ── */
+.game-info__lives {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+
+.game-info__life {
+  font-size: 1.1rem;
+  transition: all var(--transition-normal);
+}
+
+.game-info__life--full {
+  color: var(--color-accent-danger);
+  filter: drop-shadow(0 0 3px rgba(239, 68, 68, 0.3));
+}
+
+.game-info__life--empty {
+  color: var(--color-text-muted);
+  opacity: 0.3;
+}
+
+.game-info__life--lost {
+  animation: lifeLost 500ms ease-out;
+}
+
+.game-info__life--gained {
+  animation: lifeGained 500ms ease-out;
+}
+
+/* ── Captured Pieces ── */
+.game-info__captured {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  min-height: 24px;
+  font-size: 1rem;
+  opacity: 0.7;
+}
+
+.game-info__captured-piece {
+  filter: grayscale(0.3);
+}
+
+/* ── Move Log ── */
+.game-info__log {
+  padding: 12px;
+  border-radius: var(--radius-lg);
+  background: var(--color-bg-card);
+  border: var(--border-subtle);
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.game-info__log-title {
+  font-weight: 600;
+  font-size: 0.8rem;
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-bottom: 8px;
+}
+
+.game-info__log-entry {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--color-text-secondary);
+  padding: 3px 0;
+  border-bottom: 1px solid rgba(75, 85, 99, 0.15);
+}
+
+.game-info__log-entry:last-child {
+  border-bottom: none;
+}
+
+.game-info__log-entry--capture {
+  color: var(--color-accent-gold);
+}
+
+.game-info__log-entry--blind-shot {
+  color: var(--color-accent-secondary);
+}
+
+/* ── Game Over ── */
+.game-info__result {
+  padding: 20px;
+  border-radius: var(--radius-lg);
+  text-align: center;
+  font-weight: 700;
+  font-size: 1.1rem;
+  animation: scaleIn 400ms ease-out;
+}
+
+.game-info__result--win {
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.15), rgba(6, 182, 212, 0.1));
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  color: var(--color-accent-success);
+}
+
+.game-info__result--loss {
+  background: linear-gradient(135deg, rgba(239, 68, 68, 0.15), rgba(236, 201, 75, 0.05));
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  color: var(--color-accent-danger);
+}
+
+.game-info__result--draw {
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.15), rgba(139, 92, 246, 0.1));
+  border: 1px solid rgba(59, 130, 246, 0.3);
+  color: var(--color-accent-info);
+}

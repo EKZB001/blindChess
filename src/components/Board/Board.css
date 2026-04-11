@@ -1,0 +1,76 @@
+/* ═══════════════════════════════════════════════════════════════
+   Board Component Styles
+   ═══════════════════════════════════════════════════════════════ */
+
+.board-container {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.board {
+  display: grid;
+  grid-template-columns: repeat(8, var(--square-size));
+  grid-template-rows: repeat(8, var(--square-size));
+  border-radius: var(--board-border-radius);
+  overflow: hidden;
+  box-shadow:
+    var(--shadow-card),
+    0 0 0 1px rgba(75, 85, 99, 0.2);
+  position: relative;
+}
+
+/* Check warning border */
+.board--in-check {
+  animation: checkPulse 1.5s ease-in-out infinite;
+}
+
+/* King death flash */
+.board--king-dead {
+  box-shadow:
+    var(--shadow-card),
+    0 0 40px rgba(239, 68, 68, 0.4);
+}
+
+/* ── Turn Indicator ── */
+.board__turn-indicator {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 20px;
+  border-radius: var(--radius-md);
+  font-weight: 600;
+  font-size: 0.9rem;
+  letter-spacing: 0.02em;
+  background: var(--color-bg-card);
+  border: var(--border-subtle);
+}
+
+.board__turn-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  animation: gentleFloat 2s ease-in-out infinite;
+}
+
+.board__turn-dot--white {
+  background: #f0e6d3;
+  box-shadow: 0 0 8px rgba(240, 230, 211, 0.4);
+}
+
+.board__turn-dot--black {
+  background: #4a4a4a;
+  box-shadow: 0 0 8px rgba(74, 74, 74, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+/* Board rotation for black's perspective */
+.board--flipped {
+  transform: rotate(180deg);
+}
+
+.board--flipped .square {
+  transform: rotate(180deg);
+}
