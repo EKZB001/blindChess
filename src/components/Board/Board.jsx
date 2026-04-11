@@ -22,10 +22,10 @@ export default function Board({
   flashReveal,
   inCheck,
   kingSquare,
-  godMode,
+  myColor,
   onSquareClick,
 }) {
-  const isFlipped = currentTurn === 'b' && !godMode;
+  const isFlipped = myColor === 'b';
 
   const renderSquares = () => {
     const squares = [];
@@ -34,7 +34,7 @@ export default function Board({
       for (let col = 0; col < 8; col++) {
         const square = coordsToSquare(row, col);
         const piece = board[row][col];
-        const isVisible = godMode || visibleSquares.has(square);
+        const isVisible = visibleSquares.has(square);
         const isSelected = selectedSquare === square;
         const isLegalTarget = legalMoves.includes(square);
         const hasPiece = piece !== null;
@@ -55,7 +55,7 @@ export default function Board({
             isRadar={radarSquares?.has(square)}
             isFlash={flashReveal?.square === square}
             isCheck={inCheck && kingSquare === square}
-            isRevealed={!godMode && visibleSquares.has(square) && piece?.color !== currentTurn}
+            isRevealed={visibleSquares.has(square) && piece?.color !== myColor}
             onClick={() => onSquareClick(square)}
           />
         );

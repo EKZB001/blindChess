@@ -11,10 +11,7 @@
 import './Controls.css';
 
 export default function Controls({
-  onEndTurn,
   onNewGame,
-  godMode,
-  onToggleGodMode,
   gameOver,
   hasMoved,
 }) {
@@ -34,20 +31,6 @@ export default function Controls({
 
       <div className="controls__divider" />
 
-      <div
-        id="toggle-god-mode"
-        className={`controls__toggle controls__toggle--god-mode ${godMode ? 'controls__toggle--active' : ''}`}
-        onClick={onToggleGodMode}
-        role="switch"
-        aria-checked={godMode}
-        tabIndex={0}
-      >
-        <span className="controls__toggle-label">
-          👁 Tryb Boga
-        </span>
-        <span className="controls__toggle-switch" />
-      </div>
-
       <div className="controls__divider" />
 
       <button
@@ -55,7 +38,7 @@ export default function Controls({
         className="controls__btn controls__btn--new-game"
         onClick={onNewGame}
       >
-        ♟ Nowa Gra
+        ♟ Wyjdź z pokoju
       </button>
     </div>
   );
