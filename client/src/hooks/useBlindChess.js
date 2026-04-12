@@ -2,7 +2,7 @@ import { useState, useCallback, useEffect } from 'react';
 import { io } from 'socket.io-client';
 import { COLORS, GAME_RESULT, squareToCoords, coordsToSquare } from '../config/constants.js';
 
-const SERVER_URL = import.meta.env.VITE_SERVER_URL || 'http://localhost:3000';
+const SERVER_URL = import.meta.env.VITE_SERVER_URL || 'http://localhost:4000';
 
 export default function useBlindChess() {
   const [socket, setSocket] = useState(null);

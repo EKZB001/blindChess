@@ -10,17 +10,17 @@ import { RoomManager } from './roomManager.js';
 dotenv.config();
 
 const app = express();
-const PORT = process.env.PORT || 3000;
-const CORS_ORIGIN = process.env.CORS_ORIGIN || '*';
+const PORT = process.env.PORT || 4000;
+const CLIENT_URL = process.env.CLIENT_URL || 'http://localhost:5173';
 
 // Basic middleware
-app.use(cors({ origin: CORS_ORIGIN }));
+app.use(cors({ origin: CLIENT_URL }));
 app.use(express.json());
 
 const server = createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: CORS_ORIGIN,
+    origin: CLIENT_URL,
     methods: ['GET', 'POST']
   }
 });
