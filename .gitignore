@@ -25,3 +25,6 @@ npm-debug.log*
 
 # Server backend environment
 server/.env
+
+# Server logs
+server/logs/

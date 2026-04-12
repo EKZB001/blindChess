@@ -8,6 +8,7 @@ const VALID_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 
 import { BlindChessEngine } from './engine/BlindChessEngine.js';
 import { COLORS } from './config/constants.js';
+import logger from './utils/logger.js';
 
 export class RoomManager {
   constructor() {
@@ -178,7 +179,59 @@ export class RoomManager {
   }
 
   /**
-   * Publikuje stan gry (Krok 3 - Fog Of War Filter) 
+   * Wysyła aktualny stan gry do konkretnego gracza (Sync Request).
+   */
+  sendGameStateToSelectedPlayer(roomId, socketId, io) {
+    const room = this.getRoom(roomId);
+    if (!room || !room.engine) return;
+
+    let color = null;
+    if (room.players.w?.socketId === socketId) color = COLORS.WHITE;
+    else if (room.players.b?.socketId === socketId) color = COLORS.BLACK;
+
+    if (!color) return;
+
+    const payload = this._prepareGameStatePayload(room, color);
+    io.to(socketId).emit('updateBoard', payload);
+  }
+
+  /**
+   * Pomocnicza metoda przygotowująca paczkę danych dla konkretnego koloru.
+   */
+  _prepareGameStatePayload(room, color) {
+    const { board, visibleSquares } = room.engine.getVisibleBoard(color, false);
+    
+    const payload = {
+      board,
+      visibleSquares,
+      currentTurn: room.engine.getCurrentTurn(),
+      whiteLives: room.engine.getKingLives(COLORS.WHITE),
+      blackLives: room.engine.getKingLives(COLORS.BLACK),
+      whiteCaptured: room.engine.getCapturedPieces()[COLORS.WHITE],
+      blackCaptured: room.engine.getCapturedPieces()[COLORS.BLACK],
+      gameResult: room.engine.getGameResult(),
+      inCheck: room.engine.chess.inCheck() && room.engine.getCurrentTurn() === color,
+    };
+
+    // Obliczamy legalne ruchy tylko dla bierek gracza
+    const legalMovesMap = {};
+    const fullBoard = room.engine.chess.board();
+    for (let r = 0; r < 8; r++) {
+      for (let c = 0; c < 8; c++) {
+        const piece = fullBoard[r][c];
+        if (piece && piece.color === color) {
+          const sq = `${String.fromCharCode(97 + c)}${8 - r}`;
+          legalMovesMap[sq] = room.engine.getLegalMoves(sq);
+        }
+      }
+    }
+    payload.legalMoves = legalMovesMap;
+
+    return payload;
+  }
+
+  /**
+   * Publikuje stan gry (Fog Of War Filter) 
    * indywidualnie do gracza białego i gracza czarnego.
    */
   broadcastGameState(roomId, io) {
@@ -187,63 +240,13 @@ export class RoomManager {
 
     // Perspektywa Bieli
     if (room.players.w && room.players.w.socketId) {
-      const { board, visibleSquares } = room.engine.getVisibleBoard(COLORS.WHITE, false);
-      const payloadWhite = {
-        board,
-        visibleSquares: visibleSquares, // Przekazujemy gotowy słownik z BlindChessEngine
-        currentTurn: room.engine.getCurrentTurn(),
-        whiteLives: room.engine.getKingLives(COLORS.WHITE),
-        blackLives: room.engine.getKingLives(COLORS.BLACK),
-        whiteCaptured: room.engine.getCapturedPieces()[COLORS.WHITE],
-        blackCaptured: room.engine.getCapturedPieces()[COLORS.BLACK],
-        gameResult: room.engine.getGameResult(),
-        inCheck: room.engine.chess.inCheck() && room.engine.getCurrentTurn() === COLORS.WHITE,
-      };
-      
-      // Opcja A: Dołączamy zbiór legalnych ruchów dla widocznych białych bierek
-      const legalMovesMap = {};
-      for (let r = 0; r < 8; r++) {
-        for (let c = 0; c < 8; c++) {
-          const piece = room.engine.chess.board()[r][c];
-          if (piece && piece.color === COLORS.WHITE) {
-            const sq = `${String.fromCharCode(97 + c)}${8 - r}`;
-            legalMovesMap[sq] = room.engine.getLegalMoves(sq);
-          }
-        }
-      }
-      payloadWhite.legalMoves = legalMovesMap;
-
+      const payloadWhite = this._prepareGameStatePayload(room, COLORS.WHITE);
       io.to(room.players.w.socketId).emit('updateBoard', payloadWhite);
     }
 
     // Perspektywa Czerni
     if (room.players.b && room.players.b.socketId) {
-      const { board, visibleSquares } = room.engine.getVisibleBoard(COLORS.BLACK, false);
-      const payloadBlack = {
-        board,
-        visibleSquares: visibleSquares, // Przekazujemy gotowy słownik z BlindChessEngine
-        currentTurn: room.engine.getCurrentTurn(),
-        blackLives: room.engine.getKingLives(COLORS.BLACK),
-        whiteLives: room.engine.getKingLives(COLORS.WHITE),
-        whiteCaptured: room.engine.getCapturedPieces()[COLORS.WHITE],
-        blackCaptured: room.engine.getCapturedPieces()[COLORS.BLACK],
-        gameResult: room.engine.getGameResult(),
-        inCheck: room.engine.chess.inCheck() && room.engine.getCurrentTurn() === COLORS.BLACK,
-      };
-
-      // Opcja A: legal moves
-      const legalMovesMap = {};
-      for (let r = 0; r < 8; r++) {
-        for (let c = 0; c < 8; c++) {
-          const piece = room.engine.chess.board()[r][c];
-          if (piece && piece.color === COLORS.BLACK) {
-            const sq = `${String.fromCharCode(97 + c)}${8 - r}`;
-            legalMovesMap[sq] = room.engine.getLegalMoves(sq);
-          }
-        }
-      }
-      payloadBlack.legalMoves = legalMovesMap;
-
+      const payloadBlack = this._prepareGameStatePayload(room, COLORS.BLACK);
       io.to(room.players.b.socketId).emit('updateBoard', payloadBlack);
     }
   }

@@ -138,7 +138,14 @@ export default function useBlindChess() {
     });
 
     return () => newSocket.close();
-  }, []);
+  }, [getSessionId]);
+
+  // Synchronizacja przy starcie - Krok 3 (Race Condition Fix)
+  useEffect(() => {
+    if (socket && matchStarted && roomId) {
+      socket.emit('requestSync', { roomId });
+    }
+  }, [socket, matchStarted, roomId]);
 
   const createRoom = useCallback((preferredColor = 'w') => {
     if (!socket) return;

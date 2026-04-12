@@ -23,6 +23,7 @@ import {
   DIRECTIONS,
 } from '../config/constants.js';
 import { FogOfWarManager, computeVisibility } from './fogOfWar.js';
+import logger from '../utils/logger.js';
 import { computeBlindShot, isBlindShotPiece, getMoveDirection } from './blindShot.js';
 import { KingLifeManager, validateKingMove, validateCheckEscape } from './kingSystem.js';
 import { isObserver, getObserverMoves, canObserverMoveTo } from './observer.js';
@@ -77,42 +78,45 @@ export class BlindChessEngine {
    * Hidden squares show null.
    */
   getVisibleBoard(color, godMode = false) {
-    const board = this.chess.board();
-    const observers = this._getObserversForColor(color);
-    const { visible, obstacles } = computeVisibility(
-      board, color, this.fogManager[color], observers, godMode
-    );
+    try {
+      const board = this.chess.board();
+      const observers = this._getObserversForColor(color);
+      const { visible, obstacles } = computeVisibility(
+        board, color, this.fogManager[color], observers, godMode
+      );
 
-    const enemyColor = color === COLORS.WHITE ? COLORS.BLACK : COLORS.WHITE;
+      const enemyColor = color === COLORS.WHITE ? COLORS.BLACK : COLORS.WHITE;
 
-    const visibleBoard = board.map(row =>
-      row.map(cell => {
-        if (!cell) return null;
-        if (visible.has(cell.square)) {
-          // Mark observers with custom type for rendering
-          if (this.observerSquares.has(cell.square)) {
-            return { ...cell, type: PIECE_TYPES.OBSERVER, isObserver: true };
+      const visibleBoard = board.map(row =>
+        row.map(cell => {
+          if (!cell) return null;
+          if (visible.has(cell.square)) {
+            // Mark observers with custom type for rendering
+            if (this.observerSquares.has(cell.square)) {
+              return { ...cell, type: PIECE_TYPES.OBSERVER, isObserver: true };
+            }
+            return cell;
+          } else if (obstacles.has(cell.square)) {
+            // Obstacle detected by pawn (type 'obstacle' is used by Piece.jsx)
+            return { ...cell, type: 'obstacle', color: enemyColor, colorHidden: true };
           }
-          return cell;
-        } else if (obstacles.has(cell.square)) {
-          // Obstacle detected by pawn (type 'obstacle' is used by Piece.jsx)
-          return { ...cell, type: 'obstacle', color: enemyColor, colorHidden: true };
-        }
-        return null; // Hidden by fog
-      })
-    );
+          return null; // Hidden by fog
+        })
+      );
 
-    // Merge obstacles into Map
-    const visibilityMap = new Map(visible);
-    for (const obsSq of obstacles) {
-       // Obstacles shouldn't override standard visibility if it somehow was visible, though it usually isn't.
-       if (!visibilityMap.has(obsSq)) visibilityMap.set(obsSq, 'standard');
+      // Merge obstacles into Map
+      const visibilityMap = new Map(visible);
+      for (const obsSq of obstacles) {
+         if (!visibilityMap.has(obsSq)) visibilityMap.set(obsSq, 'standard');
+      }
+
+      const returnedVisibleSquares = Object.fromEntries(visibilityMap);
+      return { board: visibleBoard, visibleSquares: returnedVisibleSquares };
+    } catch (err) {
+      logger.error('Error calculating visible board:', { error: err.message, stack: err.stack, color });
+      // Zwracamy "bezpieczny" pusty stan, by nie wywalić klienta ani serwera
+      return { board: Array(8).fill(Array(8).fill(null)), visibleSquares: {} };
     }
-
-    // Return as a standard javascript object so it serializes easily in Socket.io
-    const returnedVisibleSquares = Object.fromEntries(visibilityMap);
-
-    return { board: visibleBoard, visibleSquares: returnedVisibleSquares };
   }
 
   getKingLives(color) {
@@ -399,28 +403,36 @@ export class BlindChessEngine {
   }
 
   _executeObserverMove(from, to, color) {
-    const board = this.chess.board();
-    const { row: toRow, col: toCol } = squareToCoords(to);
+    const targetPiece = this.chess.get(to);
 
-    if (!canObserverMoveTo(to, board)) {
+    // Observer moves only to empty squares (pacifism)
+    if (targetPiece) {
       this._addNotification('error', 'Obserwator nie może bić!');
       return { success: false, notifications: this.notifications, capturedPiece: null, moveData: null };
     }
 
-    // Move on chess.js board using put/remove (it's stored as queen internally)
-    const observerPiece = this.chess.get(from);
-    this.chess.remove(from);
-    this.chess.put(observerPiece, to);
-    this.observerSquares.delete(from);
-    this.observerSquares.add(to);
+    try {
+      // Execute move natively. Observer is represented as Queen in chess.js.
+      // This will automatically handle turn flip, check detection, and consistency.
+      const moveResult = this.chess.move({ from, to });
+      
+      this.observerSquares.delete(from);
+      this.observerSquares.add(to);
 
-    // Flip turn
-    this._flipTurn();
+      this.moveLog.push({ 
+        from, 
+        to, 
+        piece: { type: PIECE_TYPES.OBSERVER, color }, 
+        color 
+      });
 
-    this.moveLog.push({ from, to, piece: { ...observerPiece, type: PIECE_TYPES.OBSERVER }, color });
-    this._endTurnChecks(color);
+      this._endTurnChecks(color);
 
-    return { success: true, notifications: this.notifications, capturedPiece: null, moveData: { from, to } };
+      return { success: true, notifications: this.notifications, capturedPiece: null, moveData: moveResult };
+    } catch {
+      this._addNotification('error', 'Niedozwolony ruch Obserwatora.');
+      return { success: false, notifications: this.notifications, capturedPiece: null, moveData: null };
+    }
   }
 
   _executeKingMove(from, to, piece, color, enemyColor, inCheck) {
@@ -506,37 +518,29 @@ export class BlindChessEngine {
       return { success: false, notifications: this.notifications, capturedPiece: null, moveData: null };
     }
 
-    // Save state for check validation
-    const fenBefore = this.chess.fen();
-
-    // Execute the move manually on the board
-    const movingPiece = this.chess.get(from);
-    this.chess.remove(from);
-
+    // Clone chess state for validation without mutating the main instance
+    const tempChess = new Chess(this.chess.fen());
+    const movingPieceData = tempChess.get(from);
+    
+    // Execute the move manually on the temporary board
+    tempChess.remove(from);
     let capturedPieceData = null;
 
     if (shotResult.collision === 'enemy' && shotResult.capturedPiece) {
       // Capture at the actual target
-      capturedPieceData = this.chess.get(shotResult.actualTarget);
-      this.chess.remove(shotResult.actualTarget);
+      capturedPieceData = tempChess.get(shotResult.actualTarget);
+      tempChess.remove(shotResult.actualTarget);
     }
-
-    this.chess.put(movingPiece, shotResult.actualTarget);
-
-    // Flip turn
-    this._flipTurn();
+    tempChess.put(movingPieceData, shotResult.actualTarget);
 
     // Check if the move left our king in check (invalid)
-    const kingSquares = this.chess.board().flat().filter(
+    const kingSquares = tempChess.board().flat().filter(
       p => p && p.type === PIECE_TYPES.KING && p.color === color
     );
 
     if (kingSquares.length > 0) {
       const kingSquare = kingSquares[0].square;
-      if (this.chess.isAttacked(kingSquare, enemyColor)) {
-        // Move left king in check — revert
-        this.chess.load(fenBefore);
-
+      if (tempChess.isAttacked(kingSquare, enemyColor)) {
         if (inCheck) {
           const lifeResult = this.kingLives.loseLife(color);
           this._addNotification('danger', 'Ruch nie zdjął szacha! -1 życie.');
@@ -551,6 +555,18 @@ export class BlindChessEngine {
         return { success: false, notifications: this.notifications, capturedPiece: null, moveData: null };
       }
     }
+
+    // Move is valid -> Apply state to main instance
+    // Since Blind Shot is non-standard, we load the FEN from simulation
+    const simulatedFen = tempChess.fen();
+    
+    // We need to flip the turn in simulated fen manually if we didn't use .move()
+    // The previous manual _flipTurn was here, but let's do it cleaner by editing the FEN
+    const fenParts = simulatedFen.split(' ');
+    fenParts[1] = (fenParts[1] === 'w' ? 'b' : 'w'); // flip turn
+    fenParts[3] = '-'; // reset en passant
+    
+    this.chess.load(fenParts.join(' '));
 
     // Handle notifications for blind shot results
     if (shotResult.collision === 'enemy') {
@@ -783,18 +799,6 @@ export class BlindChessEngine {
 
   _setGameOver(result) {
     this.gameResult = result;
-  }
-
-  /**
-   * Flip turn manually (for moves that bypass chess.js move system).
-   */
-  _flipTurn() {
-    const currentFen = this.chess.fen();
-    const parts = currentFen.split(' ');
-    parts[1] = parts[1] === 'w' ? 'b' : 'w';
-    // Reset en passant when manually flipping
-    parts[3] = '-';
-    this.chess.load(parts.join(' '), { skipValidation: true });
   }
 
   /**
