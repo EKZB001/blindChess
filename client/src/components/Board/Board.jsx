@@ -23,6 +23,7 @@ export default function Board({
   inCheck,
   kingSquare,
   myColor,
+  isSpectator,
   onSquareClick,
 }) {
   const isFlipped = myColor === 'b';
@@ -71,6 +72,7 @@ export default function Board({
     'board',
     isFlipped && 'board--flipped',
     inCheck && 'board--in-check',
+    isSpectator && 'board--spectator',
   ].filter(Boolean).join(' ');
 
   return (
@@ -78,7 +80,7 @@ export default function Board({
       <div className="board__turn-indicator">
         <span className={`board__turn-dot board__turn-dot--${currentTurn === 'w' ? 'white' : 'black'}`} />
         <span>
-          {currentTurn === 'w' ? 'Białe' : 'Czarne'} — Twój ruch
+          {currentTurn === 'w' ? 'Białe' : 'Czarne'} — {isSpectator ? 'Trwa tura' : (currentTurn === myColor ? 'Twój ruch' : 'Ruch przeciwnika')}
         </span>
       </div>
 

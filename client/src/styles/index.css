@@ -189,6 +189,34 @@ body::before {
   text-transform: uppercase;
 }
 
+/* ── Spectator Banner ── */
+.spectator-banner {
+  background: linear-gradient(90deg, 
+    rgba(139, 92, 246, 0), 
+    rgba(139, 92, 246, 0.2), 
+    rgba(139, 92, 246, 0)
+  );
+  border-top: 1px solid rgba(139, 92, 246, 0.2);
+  border-bottom: 1px solid rgba(139, 92, 246, 0.2);
+  padding: 10px 0;
+  margin: 0 0 20px 0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  animation: fadeIn 0.8s ease-in-out;
+}
+
+.spectator-banner__text {
+  color: #a78bfa;
+  font-weight: 700;
+  font-size: 0.9rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .app__main {
   flex: 1;
   display: flex;

@@ -109,6 +109,7 @@ export function computeVisibility(board, color, fogManager, observers = [], godM
 
   // 3. Observer lighthouse beams
   for (const obs of observers) {
+    if (!obs.square) continue;
     const beamSquares = computeObserverBeams(obs.square, board);
     for (const sq of beamSquares) {
       if (!visible.has(sq)) {
@@ -151,6 +152,7 @@ export function computeVisibility(board, color, fogManager, observers = [], godM
  */
 export function computeObserverBeams(position, board) {
   const beams = new Set();
+  if (!position) return beams;
   const { row, col } = squareToCoords(position);
 
   for (const dir of DIRECTIONS.QUEEN) {
@@ -162,7 +164,9 @@ export function computeObserverBeams(position, board) {
       beams.add(sq);
 
       // Stop at first piece (but reveal it)
-      if (board[r][c] !== null) {
+      // Bezpieczny odczyt z tablicy board
+      const pieceAtSquare = board[r] ? board[r][c] : null;
+      if (pieceAtSquare !== null) {
         break;
       }
 

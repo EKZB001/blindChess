@@ -40,6 +40,8 @@ export default function App() {
     lobbyError,
     roomId,
     myColor,
+    role,
+    isSpectator,
     matchStarted,
     isCreator,
     rematchStatus,
@@ -56,7 +58,7 @@ export default function App() {
     return (
       <div className="app">
         <header className="app__header">
-          <h1 className="app__title">
+          <h1 className="app__title" onClick={leaveRoom} style={{ cursor: isConnected ? 'pointer' : 'default' }}>
             <span className="text-gradient">♟ Blind Chess</span>
             <span className="app__subtitle">Multiplayer</span>
           </h1>
@@ -123,13 +125,19 @@ export default function App() {
   return (
     <div className="app">
       <header className="app__header">
-        <h1 className="app__title">
+        <h1 className="app__title" onClick={leaveRoom} style={{ cursor: 'pointer' }}>
           <span className="text-gradient">♟ Blind Chess</span>
           <span className="app__subtitle">
-            Pokój: {roomId} | Twój kolor: {myColor === 'w' ? 'Białe' : 'Czarne'}
+            Pokój: {roomId} {isSpectator ? '' : `| Twój kolor: ${myColor === 'w' ? 'Białe' : 'Czarne'}`}
           </span>
         </h1>
       </header>
+
+      {isSpectator && (
+        <div className="spectator-banner">
+          <span className="spectator-banner__text">👁️ TRYB WIDZA — Oglądasz rozgrywkę</span>
+        </div>
+      )}
 
       <main className="app__main">
         <aside className="app__sidebar app__sidebar--left">
@@ -156,7 +164,8 @@ export default function App() {
             flashReveal={flashReveal}
             inCheck={inCheck}
             kingSquare={kingSquare}
-            myColor={myColor}
+            isSpectator={isSpectator}
+            myColor={isSpectator ? 'w' : myColor}
             onSquareClick={handleSquareClick}
           />
         </section>
@@ -202,7 +211,11 @@ export default function App() {
 
           {gameAlert.type !== 'check' && (
             <div style={{ marginTop: '2rem', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-              {rematchStatus === 'offered' ? (
+              {isSpectator ? (
+                <button className="controls__btn" style={{ background: '#ef4444', width: 'auto', padding: '0 40px', alignSelf: 'center' }} onClick={leaveRoom}>
+                  Wyjdź z pokoju
+                </button>
+              ) : rematchStatus === 'offered' ? (
                 <div style={{ background: 'rgba(0,0,0,0.3)', padding: '10px', borderRadius: '8px' }}>
                   <p style={{ marginTop: 0, marginBottom: '10px', fontWeight: 'bold' }}>Przeciwnik prosi o rewanż!</p>
                   <div style={{ display: 'flex', gap: '10px', justifyContent: 'center' }}>

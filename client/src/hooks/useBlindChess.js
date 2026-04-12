@@ -10,6 +10,7 @@ export default function useBlindChess() {
   const [lobbyError, setLobbyError] = useState(null);
   const [roomId, setRoomId] = useState(null);
   const [myColor, setMyColor] = useState(null);
+  const [role, setRole] = useState('player'); // 'white', 'black' or 'spectator'
   const [matchStarted, setMatchStarted] = useState(false);
   
   // Oznaczamy czy pokój był nasz, czy dołączyliśmy
@@ -107,8 +108,9 @@ export default function useBlindChess() {
     newSocket.on('updateBoard', (data) => {
       setBoardState({
         board: data.board,
-        visibleSquares: data.visibleSquares, // Zachowanie w postaci obiektu (Dictionary)
+        visibleSquares: data.visibleSquares,
         currentTurn: data.currentTurn,
+        isSpectator: data.isSpectator, // Dodano flagę od serwera
         whiteLives: data.whiteLives,
         blackLives: data.blackLives,
         capturedPieces: { w: data.whiteCaptured, b: data.blackCaptured },
@@ -116,6 +118,8 @@ export default function useBlindChess() {
         inCheck: data.inCheck,
         legalMovesMap: data.legalMoves,
       });
+      // Jeśli otrzymaliśmy paczkę jako widz, upewnijmy się że stan roli jest zsynchronizowany
+      if (data.isSpectator) setRole('spectator');
     });
 
     newSocket.on('gameAlert', (data) => {
@@ -137,6 +141,28 @@ export default function useBlindChess() {
       setLegalMoves([]);
     });
 
+    newSocket.on('joinedAsSpectator', (data) => {
+      setRoomId(data.roomId);
+      setRole('spectator');
+      setMatchStarted(true);
+      setLobbyError(null);
+      if (data.boardState && data.boardState.board) {
+        setBoardState({
+          board: data.boardState.board,
+          visibleSquares: data.boardState.visibleSquares,
+          currentTurn: data.boardState.currentTurn,
+          isSpectator: true,
+          whiteLives: data.boardState.whiteLives,
+          blackLives: data.boardState.blackLives,
+          capturedPieces: { w: data.boardState.whiteCaptured, b: data.boardState.blackCaptured },
+          gameResult: data.boardState.gameResult,
+          inCheck: data.boardState.inCheck,
+          legalMovesMap: data.boardState.legalMoves,
+        });
+      }
+      setNotifications(prev => [...prev, { type: 'system', message: 'Dołączyłeś jako widz. Oglądasz mecz w czasie rzeczywistym.', timestamp: Date.now() }]);
+    });
+
     return () => newSocket.close();
   }, [getSessionId]);
 
@@ -154,6 +180,7 @@ export default function useBlindChess() {
       if (res.success) {
         setRoomId(res.roomId);
         setMyColor(res.color);
+        setRole(res.role || (res.color === 'w' ? 'white' : 'black'));
         setIsCreator(true);
         setLobbyError(null);
       } else {
@@ -169,6 +196,7 @@ export default function useBlindChess() {
       if (res.success) {
         setRoomId(res.roomId);
         setMyColor(res.color);
+        setRole(res.role || (res.color === 'w' ? 'white' : 'black'));
         setIsCreator(false);
         setLobbyError(null);
       } else {
@@ -190,6 +218,7 @@ export default function useBlindChess() {
     setMatchStarted(false);
     setRoomId(null);
     setMyColor(null);
+    setRole('player');
     setIsCreator(false);
     setGameAlert(null);
     setRematchStatus('none');
@@ -199,9 +228,8 @@ export default function useBlindChess() {
   /** Pasywna metoda odpytująca mapę - krok 3 (Opcja A) */
   const handleSquareClick = useCallback((square) => {
     if (boardState.gameResult !== GAME_RESULT.NONE) return;
+    if (role === 'spectator') return; // Blokada dla widzów - Krok 3
     
-    // Jeżeli nasza kolej nie trwa, a klikamy cokolwiek, ignoruj lub wybierz figurę na zaś jeśli system pozwala,
-    // ale lepiej blokować jeśli w MP ma sens całkowity "turn lock". Zróbmy tak długo jak trwa ruch:
     if (boardState.currentTurn !== myColor) {
       return;
     }
@@ -285,6 +313,8 @@ export default function useBlindChess() {
     lobbyError,
     roomId,
     myColor,
+    role, // Udostępniamy rolę
+    isSpectator: role === 'spectator',
     matchStarted,
     isCreator,
     rematchStatus,

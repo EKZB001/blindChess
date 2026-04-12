@@ -79,8 +79,11 @@ export class BlindChessEngine {
    */
   getVisibleBoard(color, godMode = false) {
     try {
-      const board = this.chess.board();
-      const observers = this._getObserversForColor(color);
+      // Izolacja stanu poprzez głęboką kopię (Deep Copy) - Krok 2
+      const boardRaw = this.chess.board();
+      const board = JSON.parse(JSON.stringify(boardRaw));
+
+      const observers = this._getObserversForColor(color, board);
       const { visible, obstacles } = computeVisibility(
         board, color, this.fogManager[color], observers, godMode
       );
@@ -804,13 +807,15 @@ export class BlindChessEngine {
   /**
    * Get observers belonging to a specific color.
    */
-  _getObserversForColor(color) {
+  _getObserversForColor(color, board) {
     const observers = [];
-    const board = this.chess.board();
+    const currentBoard = board || this.chess.board();
     for (const sq of this.observerSquares) {
+      if (!sq) continue;
       const { row, col } = squareToCoords(sq);
-      const piece = board[row][col];
-      if (piece && piece.color === color) {
+      const piece = currentBoard[row] ? currentBoard[row][col] : null;
+      // Obserwatorzy technicznie są reprezentowani jako hetmany (q) w chess.js
+      if (piece && piece.color === color && piece.type === PIECE_TYPES.QUEEN) {
         observers.push({ square: sq, piece });
       }
     }

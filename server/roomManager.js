@@ -50,6 +50,7 @@ export class RoomManager {
       },
       rematchRequests: new Set(),
       disconnectTimers: { w: null, b: null },
+      spectators: [], // Nowa tablica dla widzów - Krok 2
       engine: null
     };
 
@@ -63,43 +64,54 @@ export class RoomManager {
   joinRoom(roomId, socketId, sessionId) {
     const room = this.rooms.get(roomId);
 
+    // KROK 0: Sprawdzenie istnienia pokoju
     if (!room) {
       return { success: false, reason: 'Pokój o podanym kodzie nie istnieje.' };
     }
 
-    // Sprawdzenie powrotu (Reconnect)
+    // KROK 1: Sprawdzenie Rekoneksji (Priorytet re-entry)
     if (room.players.w && room.players.w.sessionId === sessionId) {
       room.players.w.socketId = socketId;
       if (room.disconnectTimers.w) {
         clearTimeout(room.disconnectTimers.w);
         room.disconnectTimers.w = null;
       }
-      return { success: true, room, color: 'w', reconnected: true };
+      return { success: true, room, color: 'w', role: 'white', reconnected: true };
     }
+
     if (room.players.b && room.players.b.sessionId === sessionId) {
       room.players.b.socketId = socketId;
       if (room.disconnectTimers.b) {
         clearTimeout(room.disconnectTimers.b);
         room.disconnectTimers.b = null;
       }
-      return { success: true, room, color: 'b', reconnected: true };
+      return { success: true, room, color: 'b', role: 'black', reconnected: true };
     }
 
-    if (room.players.w && room.players.b) {
-      return { success: false, reason: 'Lobby jest już pełne (2 graczy).' };
-    }
-
-    // Przypisanie do jedynego wolnego miejsca
-    let assignedColor = null;
+    // KROK 2: Sprawdzenie Wolnych Miejsc (Nowi gracze)
     if (!room.players.w) {
       room.players.w = { sessionId, socketId };
-      assignedColor = 'w';
-    } else {
-      room.players.b = { sessionId, socketId };
-      assignedColor = 'b';
+      return { success: true, room, color: 'w', role: 'white', reconnected: false };
     }
 
-    return { success: true, room, color: assignedColor, reconnected: false };
+    if (!room.players.b) {
+      room.players.b = { sessionId, socketId };
+      return { success: true, room, color: 'b', role: 'black', reconnected: false };
+    }
+
+    // KROK 3: Tryb Widza (Jeśli kod dotarł tutaj, to pokój jest pełen)
+    if (!room.spectators) {
+      room.spectators = []; // Zabezpieczenie Fail-safe
+    }
+
+    room.spectators.push({ socketId, sessionId });
+    return { 
+      success: true, 
+      room, 
+      color: 'w', // Widz domyślnie widzi perspektywę białych
+      role: 'spectator', 
+      reconnected: false 
+    };
   }
 
   getRoom(roomId) {
@@ -108,7 +120,11 @@ export class RoomManager {
 
   getRoomBySocket(socketId) {
     for (const room of this.rooms.values()) {
-      if (room.players.w?.socketId === socketId || room.players.b?.socketId === socketId) {
+      if (
+        room.players.w?.socketId === socketId || 
+        room.players.b?.socketId === socketId ||
+        room.spectators.some(s => s.socketId === socketId)
+      ) {
         return room;
       }
     }
@@ -122,8 +138,18 @@ export class RoomManager {
     if (!room) return null;
 
     let colorLeft = null;
+    let isSpectator = false;
+
     if (room.players.w?.socketId === socketId) colorLeft = 'w';
     else if (room.players.b?.socketId === socketId) colorLeft = 'b';
+    else {
+      // Sprawdzenie czy to widz wyszedł
+      const specIndex = room.spectators.findIndex(s => s.socketId === socketId);
+      if (specIndex !== -1) {
+        room.spectators.splice(specIndex, 1);
+        isSpectator = true;
+      }
+    }
 
     if (forceDelete && colorLeft) {
       room.players[colorLeft] = null;
@@ -132,9 +158,7 @@ export class RoomManager {
       }
     }
     
-    // Jeśli permanentnie obaj usunięci to usuwamy - logic delete depends on timers checked in index.js.
-    // Zwracam referencję dla `index.js`, która sama tym zarządzi.
-    return { room, colorLeft };
+    return { room, colorLeft, isSpectator };
   }
 
   /**
@@ -186,25 +210,33 @@ export class RoomManager {
     if (!room || !room.engine) return;
 
     let color = null;
+    let isSpectator = false;
+
     if (room.players.w?.socketId === socketId) color = COLORS.WHITE;
     else if (room.players.b?.socketId === socketId) color = COLORS.BLACK;
+    else if (room.spectators.some(s => s.socketId === socketId)) {
+      color = COLORS.WHITE; // Widz widzi perspektywę białych, ale z godMode
+      isSpectator = true;
+    }
 
-    if (!color) return;
+    if (!color && !isSpectator) return;
 
-    const payload = this._prepareGameStatePayload(room, color);
+    const payload = this._prepareGameStatePayload(room, color, isSpectator);
     io.to(socketId).emit('updateBoard', payload);
   }
 
   /**
    * Pomocnicza metoda przygotowująca paczkę danych dla konkretnego koloru.
    */
-  _prepareGameStatePayload(room, color) {
-    const { board, visibleSquares } = room.engine.getVisibleBoard(color, false);
+  _prepareGameStatePayload(room, color, isSpectator = false) {
+    // Widzowie otrzymują pełny wgląd (godMode = true) - Krok 2
+    const { board, visibleSquares } = room.engine.getVisibleBoard(color, isSpectator);
     
     const payload = {
       board,
       visibleSquares,
       currentTurn: room.engine.getCurrentTurn(),
+      isSpectator, // Informujemy klienta o trybie widza
       whiteLives: room.engine.getKingLives(COLORS.WHITE),
       blackLives: room.engine.getKingLives(COLORS.BLACK),
       whiteCaptured: room.engine.getCapturedPieces()[COLORS.WHITE],
@@ -248,6 +280,14 @@ export class RoomManager {
     if (room.players.b && room.players.b.socketId) {
       const payloadBlack = this._prepareGameStatePayload(room, COLORS.BLACK);
       io.to(room.players.b.socketId).emit('updateBoard', payloadBlack);
+    }
+
+    // Perspektywa Widzów (Pełna Tablica)
+    if (room.spectators.length > 0) {
+      const payloadSpec = this._prepareGameStatePayload(room, COLORS.WHITE, true);
+      room.spectators.forEach(spec => {
+        io.to(spec.socketId).emit('updateBoard', payloadSpec);
+      });
     }
   }
 }

@@ -97,7 +97,12 @@ io.on('connection', (socket) => {
 
     if (result.reconnected) {
       logger.info(`[Room] Gracz powrócił do pokoju ${normalizedRoomId} (Sesja: ${sessionId}, nowy socket: ${socket.id})`);
-      if (typeof cb === 'function') cb({ success: true, roomId: normalizedRoomId, color: result.color });
+      if (typeof cb === 'function') cb({ 
+        success: true, 
+        roomId: normalizedRoomId, 
+        color: result.color,
+        role: result.role 
+      });
       
       // Powiedz klientowi, że mecz już trwa, żeby wyszedł z Lobby
       socket.emit('matchStarted', { 
@@ -105,18 +110,39 @@ io.on('connection', (socket) => {
         roomId: normalizedRoomId,
       });
 
-      roomManager.broadcastGameState(normalizedRoomId, io);
+      roomManager.sendGameStateToSelectedPlayer(normalizedRoomId, socket.id, io);
       return;
     }
 
-    logger.info(`[Room] Gracz ${socket.id} dołączył do pokoju ${normalizedRoomId} jako kolor ${result.color} (sesja: ${sessionId})`);
+    logger.info(`[Room] Gracz ${socket.id} dołączył do pokoju ${normalizedRoomId} jako ${result.role} (sesja: ${sessionId})`);
 
     if (typeof cb === 'function') {
-      cb({ success: true, roomId: normalizedRoomId, color: result.color });
+      cb({ 
+        success: true, 
+        roomId: normalizedRoomId, 
+        color: result.color,
+        role: result.role
+      });
     }
 
-    // Sprawdzenie, czy lobby jest pełne - w takim wypadku "mecz wystartował"
     const room = roomManager.getRoom(normalizedRoomId);
+
+    // Jeśli dołączył widz, wyślij mu dedykowane zdarzenie joinedAsSpectator (Krok 2)
+    if (result.role === 'spectator') {
+      const payload = room.engine 
+        ? roomManager._prepareGameStatePayload(room, 'w', true) // godMode: true
+        : { isSpectator: true };
+
+      socket.emit('joinedAsSpectator', { 
+        success: true,
+        roomId: normalizedRoomId,
+        role: 'spectator',
+        boardState: payload
+      });
+
+      logger.info(`[Room] Widz ${socket.id} dołączył do pokoju ${normalizedRoomId}.`);
+      return;
+    }
     if (room && room.players.w && room.players.b) {
       if (!room.engine) {
          roomManager.initEngine(normalizedRoomId);
@@ -188,8 +214,17 @@ io.on('connection', (socket) => {
       // Aktualizuj wszystkich graczy ocenzurowanymi widokami (Krok 3)
       roomManager.broadcastGameState(roomId, io);
     } catch (err) {
-      logger.error('Error during attemptMove calculation:', { error: err.message, stack: err.stack, roomId, from, to });
-      socket.emit('moveInvalid', { message: 'Błąd wewnętrzny serwera podczas przetwarzania ruchu.' });
+      logger.error('CRITICAL ERROR during attemptMove execution:', { 
+        error: err.message, 
+        stack: err.stack, 
+        roomId, 
+        from, 
+        to, 
+        player: socket.id 
+      });
+      // Powiadomienie klienta o błędzie krytycznym (Race Condition / Inconsistency)
+      socket.emit('error', 'Wystąpił błąd synchronizacji ruchu. Spróbuj ponownie lub odśwież stronę.');
+      socket.emit('moveInvalid', { message: 'Błąd wewnętrzny serwera.' });
     }
   });
 
@@ -228,10 +263,16 @@ io.on('connection', (socket) => {
   function handlePlayerDisconnect(s, manualLeave) {
     const rmInfo = roomManager.removePlayer(s.id, manualLeave);
     
-    if (rmInfo && rmInfo.room && rmInfo.colorLeft) {
-      const { room, colorLeft } = rmInfo;
+    if (rmInfo && rmInfo.room) {
+      const { room, colorLeft, isSpectator } = rmInfo;
 
-      if (manualLeave) {
+      if (isSpectator) {
+        logger.info(`[Room] Widz ${s.id} opuścił pokój ${room.id}.`);
+        s.leave(room.id);
+        return;
+      }
+
+      if (manualLeave && colorLeft) {
          // Permamentne wyjście
          io.to(room.id).emit('opponentDisconnected', { message: 'Przeciwnik opuścił pokój.' });
          logger.info(`[Room] Gracz jawnie opuścił pokój ${room.id}.`);

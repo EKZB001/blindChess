@@ -74,3 +74,14 @@
 .board--flipped .square {
   transform: rotate(180deg);
 }
+
+/* ── Spectator Mode Interaction Lock ── */
+.board--spectator {
+  pointer-events: none;
+  cursor: default;
+}
+
+.board--spectator .square {
+  cursor: default !important;
+}
+
