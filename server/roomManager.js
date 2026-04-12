@@ -28,9 +28,9 @@ export class RoomManager {
   /**
    * Tworzy nowy pokój dla socketa, uwzględniając wymuszenie lub wylosowanie preferowanego koloru.
    */
-  createRoom(socketId, preferredColor = 'w') {
+  createRoom(socketId, sessionId, preferredColor = 'w') {
     let roomId;
-    // Zapobieganie unikalnej kolizji (choć szansa to 1 na kilkaset tysięcy)
+    // Zapobieganie unikalnej kolizji
     do {
       roomId = this._generateRoomId();
     } while (this.rooms.has(roomId));
@@ -44,10 +44,11 @@ export class RoomManager {
       id: roomId,
       creatorId: socketId,
       players: {
-        w: finalColor === 'w' ? socketId : null,
-        b: finalColor === 'b' ? socketId : null
+        w: finalColor === 'w' ? { sessionId, socketId } : null,
+        b: finalColor === 'b' ? { sessionId, socketId } : null
       },
       rematchRequests: new Set(),
+      disconnectTimers: { w: null, b: null },
       engine: null
     };
 
@@ -56,13 +57,31 @@ export class RoomManager {
   }
 
   /**
-   * Weryfikuje i dołącza socket do istniejącego pokoju.
+   * Weryfikuje i dołącza socket do istniejącego pokoju lub obsługuje powrót (Reconnect).
    */
-  joinRoom(roomId, socketId) {
+  joinRoom(roomId, socketId, sessionId) {
     const room = this.rooms.get(roomId);
 
     if (!room) {
       return { success: false, reason: 'Pokój o podanym kodzie nie istnieje.' };
+    }
+
+    // Sprawdzenie powrotu (Reconnect)
+    if (room.players.w && room.players.w.sessionId === sessionId) {
+      room.players.w.socketId = socketId;
+      if (room.disconnectTimers.w) {
+        clearTimeout(room.disconnectTimers.w);
+        room.disconnectTimers.w = null;
+      }
+      return { success: true, room, color: 'w', reconnected: true };
+    }
+    if (room.players.b && room.players.b.sessionId === sessionId) {
+      room.players.b.socketId = socketId;
+      if (room.disconnectTimers.b) {
+        clearTimeout(room.disconnectTimers.b);
+        room.disconnectTimers.b = null;
+      }
+      return { success: true, room, color: 'b', reconnected: true };
     }
 
     if (room.players.w && room.players.b) {
@@ -72,14 +91,14 @@ export class RoomManager {
     // Przypisanie do jedynego wolnego miejsca
     let assignedColor = null;
     if (!room.players.w) {
-      room.players.w = socketId;
+      room.players.w = { sessionId, socketId };
       assignedColor = 'w';
     } else {
-      room.players.b = socketId;
+      room.players.b = { sessionId, socketId };
       assignedColor = 'b';
     }
 
-    return { success: true, room, color: assignedColor };
+    return { success: true, room, color: assignedColor, reconnected: false };
   }
 
   getRoom(roomId) {
@@ -88,28 +107,33 @@ export class RoomManager {
 
   getRoomBySocket(socketId) {
     for (const room of this.rooms.values()) {
-      if (room.players.w === socketId || room.players.b === socketId) {
+      if (room.players.w?.socketId === socketId || room.players.b?.socketId === socketId) {
         return room;
       }
     }
     return null;
   }
 
-  removePlayer(socketId) {
+  // Funkcja wywoływana pod disconnect (odlicza Grace Period 60 sekund).
+  // Natomiast explicit 'leaveRoom' wyrzuca gracza szybciej w index.js.
+  removePlayer(socketId, forceDelete = false) {
     const room = this.getRoomBySocket(socketId);
     if (!room) return null;
 
-    if (room.players.w === socketId) room.players.w = null;
-    if (room.players.b === socketId) room.players.b = null;
-    room.rematchRequests.delete(socketId);
+    let colorLeft = null;
+    if (room.players.w?.socketId === socketId) colorLeft = 'w';
+    else if (room.players.b?.socketId === socketId) colorLeft = 'b';
 
-    // Jeżeli pokój stał się pusty niszczymy go
-    if (!room.players.w && !room.players.b) {
-      this.rooms.delete(room.id);
-      return { roomId: room.id, roomDeleted: true };
+    if (forceDelete && colorLeft) {
+      room.players[colorLeft] = null;
+      if (room.disconnectTimers[colorLeft]) {
+        clearTimeout(room.disconnectTimers[colorLeft]);
+      }
     }
-
-    return { roomId: room.id, roomDeleted: false };
+    
+    // Jeśli permanentnie obaj usunięci to usuwamy - logic delete depends on timers checked in index.js.
+    // Zwracam referencję dla `index.js`, która sama tym zarządzi.
+    return { room, colorLeft };
   }
 
   /**
@@ -121,17 +145,18 @@ export class RoomManager {
 
     room.rematchRequests.add(socketId);
 
-    // Jeżeli dwaj gracze (lub wszyscy z obcnych jeśli jeden jakimś cudem wszedł pod dwa, ale upewniamy się że obaj wyrazili chęć)
-    const p1 = room.players.w;
-    const p2 = room.players.b;
+    // Upewniamy się, że obaj gracze istnieją 
+    const p1 = room.players.w?.socketId;
+    const p2 = room.players.b?.socketId;
 
     if (p1 && p2 && room.rematchRequests.has(p1) && room.rematchRequests.has(p2)) {
       // Wyzeruj requests
       room.rematchRequests.clear();
       
       // Zamień graczy
-      room.players.w = p2;
-      room.players.b = p1;
+      const temp = room.players.w;
+      room.players.w = room.players.b;
+      room.players.b = temp;
       
       // Zainicjuj silnik na nowo!
       room.engine = new BlindChessEngine();
@@ -161,11 +186,11 @@ export class RoomManager {
     if (!room || !room.engine) return;
 
     // Perspektywa Bieli
-    if (room.players.w) {
+    if (room.players.w && room.players.w.socketId) {
       const { board, visibleSquares } = room.engine.getVisibleBoard(COLORS.WHITE, false);
       const payloadWhite = {
         board,
-        visibleSquares: Array.from(visibleSquares), // Sockets prefer Arrays over Sets
+        visibleSquares: visibleSquares, // Przekazujemy gotowy słownik z BlindChessEngine
         currentTurn: room.engine.getCurrentTurn(),
         whiteLives: room.engine.getKingLives(COLORS.WHITE),
         blackLives: room.engine.getKingLives(COLORS.BLACK),
@@ -188,15 +213,15 @@ export class RoomManager {
       }
       payloadWhite.legalMoves = legalMovesMap;
 
-      io.to(room.players.w).emit('updateBoard', payloadWhite);
+      io.to(room.players.w.socketId).emit('updateBoard', payloadWhite);
     }
 
     // Perspektywa Czerni
-    if (room.players.b) {
+    if (room.players.b && room.players.b.socketId) {
       const { board, visibleSquares } = room.engine.getVisibleBoard(COLORS.BLACK, false);
       const payloadBlack = {
         board,
-        visibleSquares: Array.from(visibleSquares),
+        visibleSquares: visibleSquares, // Przekazujemy gotowy słownik z BlindChessEngine
         currentTurn: room.engine.getCurrentTurn(),
         blackLives: room.engine.getKingLives(COLORS.BLACK),
         whiteLives: room.engine.getKingLives(COLORS.WHITE),
@@ -219,7 +244,7 @@ export class RoomManager {
       }
       payloadBlack.legalMoves = legalMovesMap;
 
-      io.to(room.players.b).emit('updateBoard', payloadBlack);
+      io.to(room.players.b.socketId).emit('updateBoard', payloadBlack);
     }
   }
 }

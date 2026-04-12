@@ -102,7 +102,17 @@ export class BlindChessEngine {
       })
     );
 
-    return { board: visibleBoard, visibleSquares: new Set([...visible, ...obstacles]) };
+    // Merge obstacles into Map
+    const visibilityMap = new Map(visible);
+    for (const obsSq of obstacles) {
+       // Obstacles shouldn't override standard visibility if it somehow was visible, though it usually isn't.
+       if (!visibilityMap.has(obsSq)) visibilityMap.set(obsSq, 'standard');
+    }
+
+    // Return as a standard javascript object so it serializes easily in Socket.io
+    const returnedVisibleSquares = Object.fromEntries(visibilityMap);
+
+    return { board: visibleBoard, visibleSquares: returnedVisibleSquares };
   }
 
   getKingLives(color) {

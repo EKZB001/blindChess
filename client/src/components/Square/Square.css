@@ -101,6 +101,8 @@
 
 /* ── Observer Beam ── */
 .square--observer-beam {
+  box-shadow: inset 0 0 15px rgba(138, 43, 226, 0.6);
+  background-color: rgba(138, 43, 226, 0.2) !important;
   animation: observerBeam 3s ease-in-out infinite;
 }
 

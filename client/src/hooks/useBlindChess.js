@@ -24,7 +24,7 @@ export default function useBlindChess() {
   // Zamiast instancji engine lokalnego, trzymamy tylko "Głupi Terminal" danych dla renderowania
   const [boardState, setBoardState] = useState({
     board: Array(8).fill(Array(8).fill(null)),
-    visibleSquares: new Set(),
+    visibleSquares: {}, // słownik
     currentTurn: COLORS.WHITE,
     whiteLives: 5,
     blackLives: 5,
@@ -40,6 +40,16 @@ export default function useBlindChess() {
   const [lastMove, setLastMove] = useState(null);
 
   // Tryb Boga usunięto zgodnie z wytycznymi bezpieczeństwa (nie ma go w multiplayer)
+
+  // Generowanie lub pobieranie trwałej sesji z przeglądarki
+  const getSessionId = useCallback(() => {
+    let sid = sessionStorage.getItem('blindchess_session_id');
+    if (!sid) {
+       sid = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+       sessionStorage.setItem('blindchess_session_id', sid);
+    }
+    return sid;
+  }, []);
 
   // Setup SocketIO
   useEffect(() => {
@@ -97,7 +107,7 @@ export default function useBlindChess() {
     newSocket.on('updateBoard', (data) => {
       setBoardState({
         board: data.board,
-        visibleSquares: new Set(data.visibleSquares),
+        visibleSquares: data.visibleSquares, // Zachowanie w postaci obiektu (Dictionary)
         currentTurn: data.currentTurn,
         whiteLives: data.whiteLives,
         blackLives: data.blackLives,
@@ -132,7 +142,8 @@ export default function useBlindChess() {
 
   const createRoom = useCallback((preferredColor = 'w') => {
     if (!socket) return;
-    socket.emit('createRoom', { preferredColor }, (res) => {
+    const sessionId = getSessionId();
+    socket.emit('createRoom', { preferredColor, sessionId }, (res) => {
       if (res.success) {
         setRoomId(res.roomId);
         setMyColor(res.color);
@@ -142,11 +153,12 @@ export default function useBlindChess() {
         setLobbyError(res.reason);
       }
     });
-  }, [socket]);
+  }, [socket, getSessionId]);
 
   const joinRoom = useCallback((id) => {
     if (!socket || !id) return;
-    socket.emit('joinRoom', id, (res) => {
+    const sessionId = getSessionId();
+    socket.emit('joinRoom', { roomId: id, sessionId }, (res) => {
       if (res.success) {
         setRoomId(res.roomId);
         setMyColor(res.color);
@@ -156,7 +168,7 @@ export default function useBlindChess() {
         setLobbyError(res.reason);
       }
     });
-  }, [socket]);
+  }, [socket, getSessionId]);
 
   const requestRematch = useCallback(() => {
     if (!socket || !roomId) return;

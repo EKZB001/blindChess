@@ -34,7 +34,9 @@ export default function Board({
       for (let col = 0; col < 8; col++) {
         const square = coordsToSquare(row, col);
         const piece = board[row][col];
-        const isVisible = visibleSquares.has(square);
+        const visibilityType = visibleSquares ? visibleSquares[square] : null;
+        const isVisible = !!visibilityType;
+        const isObserverGlow = visibilityType === 'observer_glow';
         const isSelected = selectedSquare === square;
         const isLegalTarget = legalMoves.includes(square);
         const hasPiece = piece !== null;
@@ -51,11 +53,11 @@ export default function Board({
             isLegalCapture={isLegalTarget && hasPiece && isVisible}
             isLastMoveFrom={lastMove?.from === square}
             isLastMoveTo={lastMove?.to === square}
-            isObserverBeam={observerBeamSquares?.has(square)}
+            isObserverBeam={isObserverGlow}
             isRadar={radarSquares?.has(square)}
             isFlash={flashReveal?.square === square}
             isCheck={inCheck && kingSquare === square}
-            isRevealed={visibleSquares.has(square) && piece?.color !== myColor}
+            isRevealed={isVisible && piece?.color !== myColor}
             onClick={() => onSquareClick(square)}
           />
         );

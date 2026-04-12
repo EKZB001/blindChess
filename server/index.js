@@ -19,6 +19,8 @@ app.use(express.json());
 
 const server = createServer(app);
 const io = new Server(server, {
+  pingInterval: 25000,
+  pingTimeout: 60000,
   cors: {
     origin: CLIENT_URL,
     methods: ['GET', 'POST']
@@ -33,52 +35,74 @@ io.on('connection', (socket) => {
 
   // 1. Zdarzenie tworzenia pokoju
   socket.on('createRoom', (options, callback) => {
-    // Jeżeli wysyłaliśmy callback jako pierwszy argument (wcześniejsza struktura), trzeba pomyślec o failback.
-    // Teraz z forntendu będzie to options: { preferredColor: string }, callback: func
     let prefColor = 'w';
+    let sessionId = 'unknown';
     let cb = callback;
+
     if (typeof options === 'function') {
       cb = options;
-    } else if (options && options.preferredColor) {
-      prefColor = options.preferredColor;
+    } else if (options) {
+      if (options.preferredColor) prefColor = options.preferredColor;
+      if (options.sessionId) sessionId = options.sessionId;
     }
 
-    // Profilaktycznie weryfikujemy: jeden socket powinen być tylko w jednym pokoju gry na raz
+    // Profilaktycznie weryfikujemy
     if (roomManager.getRoomBySocket(socket.id)) {
        if (typeof cb === 'function') cb({ success: false, reason: 'Znajdujesz się już w pokoju.' });
        return;
     }
 
-    const { room, color } = roomManager.createRoom(socket.id, prefColor);
+    const { room, color } = roomManager.createRoom(socket.id, sessionId, prefColor);
     socket.join(room.id);
     
-    console.log(`[Room] Pokój utworzony: ${room.id} przez ${socket.id} (preferowany kolor: ${color})`);
+    console.log(`[Room] Pokój utworzony: ${room.id} przez ${socket.id} (preferowany kolor: ${color}, sesja: ${sessionId})`);
     
-    // Zwrócenie wygenerowanego kodu dla frontend-u
     if (typeof cb === 'function') {
       cb({ success: true, roomId: room.id, color });
     }
   });
 
   // 2. Zdarzenie dołączenia do pokoju
-  socket.on('joinRoom', (roomId, callback) => {
-    // Normalizacja - zamieniamy na duże litery na wypadek pomyłki gracza podczas wpisywania
-    const normalizedRoomId = String(roomId).toUpperCase();
+  socket.on('joinRoom', (options, callback) => {
+    let roomId = options;
+    let sessionId = 'unknown';
+    let cb = callback;
 
-    const result = roomManager.joinRoom(normalizedRoomId, socket.id);
+    if (typeof options === 'object' && options !== null) {
+      roomId = options.roomId;
+      sessionId = options.sessionId;
+    }
+
+    const normalizedRoomId = String(roomId).toUpperCase();
+    const result = roomManager.joinRoom(normalizedRoomId, socket.id, sessionId);
     
     if (!result.success) {
-      if (typeof callback === 'function') {
-        callback({ success: false, reason: result.reason });
+      if (typeof cb === 'function') {
+        cb({ success: false, reason: result.reason });
       }
       return;
     }
 
     socket.join(normalizedRoomId);
-    console.log(`[Room] Gracz ${socket.id} dołączył do pokoju ${normalizedRoomId} jako kolor ${result.color}`);
 
-    if (typeof callback === 'function') {
-      callback({ success: true, roomId: normalizedRoomId, color: result.color });
+    if (result.reconnected) {
+      console.log(`[Room] Gracz powrócił do pokoju ${normalizedRoomId} (Sesja: ${sessionId}, nowy socket: ${socket.id})`);
+      if (typeof cb === 'function') cb({ success: true, roomId: normalizedRoomId, color: result.color });
+      
+      // Powiedz klientowi, że mecz już trwa, żeby wyszedł z Lobby
+      socket.emit('matchStarted', { 
+        message: 'Połączono ponownie. Przywracanie partii...',
+        roomId: normalizedRoomId,
+      });
+
+      roomManager.broadcastGameState(normalizedRoomId, io);
+      return;
+    }
+
+    console.log(`[Room] Gracz ${socket.id} dołączył do pokoju ${normalizedRoomId} jako kolor ${result.color} (sesja: ${sessionId})`);
+
+    if (typeof cb === 'function') {
+      cb({ success: true, roomId: normalizedRoomId, color: result.color });
     }
 
     // Sprawdzenie, czy lobby jest pełne - w takim wypadku "mecz wystartował"
@@ -105,8 +129,8 @@ io.on('connection', (socket) => {
     if (!room || !room.engine) return;
 
     // Sprawdzenie czyja to tura
-    const isWhite = socket.id === room.players.w;
-    const isBlack = socket.id === room.players.b;
+    const isWhite = socket.id === room.players.w?.socketId;
+    const isBlack = socket.id === room.players.b?.socketId;
 
     if (!isWhite && !isBlack) return; // Obserwatorzy bez prawa głosu?
     
@@ -148,10 +172,9 @@ io.on('connection', (socket) => {
     roomManager.broadcastGameState(roomId, io);
   });
 
-  // Zdarzenie wyjścia z pokoju (dobrowolne)
+  // Zdarzenie wyjścia z pokoju (dobrowolne - permamentne wyrzucenie)
   socket.on('leaveRoom', (roomId) => {
-    // Używamy zunifkowanej funkcji disconnect logic pod spodem
-    handlePlayerDisconnect(socket);
+    handlePlayerDisconnect(socket, true);
   });
 
   // Mechanika Rewanżu
@@ -165,35 +188,55 @@ io.on('connection', (socket) => {
       const room = roomManager.getRoom(roomId);
       
       // Powiadamiamy oba sockety indywidualnie by odświeżyły myColor
-      if (room.players.w) io.to(room.players.w).emit('gameRestarted', { color: 'w', message: 'Rewanż zaakceptowany. Grasz Białymi!' });
-      if (room.players.b) io.to(room.players.b).emit('gameRestarted', { color: 'b', message: 'Rewanż zaakceptowany. Grasz Czarnymi!' });
+      if (room.players.w?.socketId) io.to(room.players.w.socketId).emit('gameRestarted', { color: 'w', message: 'Rewanż zaakceptowany. Grasz Białymi!' });
+      if (room.players.b?.socketId) io.to(room.players.b.socketId).emit('gameRestarted', { color: 'b', message: 'Rewanż zaakceptowany. Grasz Czarnymi!' });
       
       // Wyślij czystą planszę z nowej instancji
       roomManager.broadcastGameState(roomId, io);
     } else if (result.notifyOpponent) {
-      // Wyślij do drugiego gracza powiadomienie z opcją na akceptację
       socket.to(roomId).emit('rematchOffered', { message: 'Przeciwnik prosi o rewanż!' });
     }
   });
 
-  // Odłączenie
+  // Odłączenie (Network drop / Refresh)
   socket.on('disconnect', () => {
     console.log(`[Socket] Klient rozłączony: ${socket.id}`);
-    handlePlayerDisconnect(socket);
+    handlePlayerDisconnect(socket, false);
   });
 
-  function handlePlayerDisconnect(s) {
-    const result = roomManager.removePlayer(s.id);
+  function handlePlayerDisconnect(s, manualLeave) {
+    const rmInfo = roomManager.removePlayer(s.id, manualLeave);
     
-    if (result) {
-      // Usunięto gracza. Jak pokój nie został skasowany - powiadom pozostałego gracza (jeśli jest).
-      if (!result.roomDeleted) {
-        io.to(result.roomId).emit('opponentDisconnected', { 
-           message: 'Przeciwnik opuścił pokój.' 
-        });
+    if (rmInfo && rmInfo.room && rmInfo.colorLeft) {
+      const { room, colorLeft } = rmInfo;
+
+      if (manualLeave) {
+         // Permamentne wyjście
+         io.to(room.id).emit('opponentDisconnected', { message: 'Przeciwnik opuścił pokój.' });
+         console.log(`[Room] Gracz jawnie opuścił pokój ${room.id}.`);
+         
+         // Zniszcz resztki pokoju
+         room.players.w = null;
+         room.players.b = null;
+         roomManager.rooms.delete(room.id);
+         s.leave(room.id);
+      } else {
+         // Grace Period: 60 sekund nim zniszczy pokój.
+         console.log(`[Room] Rozpoczynam Grace Period (60s) dla utraconego gniazda w: ${room.id}`);
+         
+         // Ustawiamy timer:
+         room.disconnectTimers[colorLeft] = setTimeout(() => {
+            console.log(`[Room] Grace period upłynął dla pokoju ${room.id}. Wyrzucam gracza ${colorLeft}.`);
+            // Usuwamy go permenentnie z pokoju
+            room.players[colorLeft] = null;
+            io.to(room.id).emit('opponentDisconnected', { message: 'Przeciwnik utracił połączenie z serwerem.' });
+            
+            // Jeśli pokój stał się całkowicie pusty, usuwamy go
+            if (!room.players.w && !room.players.b) {
+               roomManager.rooms.delete(room.id);
+            }
+         }, 60000);
       }
-      console.log(`[Room] Gracz usunięty z pokoju ${result.roomId}. Usunięto całkowicie pokój: ${result.roomDeleted}`);
-      s.leave(result.roomId);
     }
   }
 });

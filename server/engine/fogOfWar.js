@@ -80,13 +80,13 @@ export class FogOfWarManager {
  * @returns {Set<string>} set of visible square names
  */
 export function computeVisibility(board, color, fogManager, observers = [], godMode = false) {
-  const visible = new Set();
+  const visible = new Map();
   const obstacles = new Set();
 
   if (godMode) {
     for (let r = 0; r < 8; r++) {
       for (let c = 0; c < 8; c++) {
-        visible.add(coordsToSquare(r, c));
+        visible.set(coordsToSquare(r, c), 'standard');
       }
     }
     return { visible, obstacles };
@@ -97,21 +97,23 @@ export function computeVisibility(board, color, fogManager, observers = [], godM
     for (let c = 0; c < 8; c++) {
       const piece = board[r][c];
       if (piece && piece.color === color) {
-        visible.add(coordsToSquare(r, c));
+        visible.set(coordsToSquare(r, c), 'standard');
       }
     }
   }
 
   // 2. Temporarily revealed squares (from captures, king collisions, etc.)
   for (const sq of fogManager.getRevealedSquares()) {
-    visible.add(sq);
+    visible.set(sq, 'standard');
   }
 
   // 3. Observer lighthouse beams
   for (const obs of observers) {
     const beamSquares = computeObserverBeams(obs.square, board);
     for (const sq of beamSquares) {
-      visible.add(sq);
+      if (!visible.has(sq)) {
+        visible.set(sq, 'observer_glow');
+      }
     }
   }
 
