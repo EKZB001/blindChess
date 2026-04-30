@@ -13,8 +13,8 @@ Wkrocz na pole bitwy okryte gęstą mgłą wojny. **Blind Chess** to nowatorskie
 
 Klasyczne zasady szachów zostały zmodyfikowane, aby stworzyć dynamiczną, pełną napięcia rozgrywkę w warunkach ograniczonej widoczności:
 
-- 🌫️ **Mgła Wojny (Fog of War):** Widzisz tylko swoje bierki i pola, które one atakują. Reszta planszy jest spowita ciemnością. Zbieranie informacji jest kluczem do zwycięstwa.
-- ❤️ **Król ma 5 żyć:** Szach mat nie kończy gry od razu! Król posiada pulę 5 punktów życia. Wejście na atakowane pole lub niemożność ucieczki przed szachem kosztuje 1 życie.
+- 🌫️ **Mgła Wojny (Fog of War):** Widzisz tylko swoje bierki. Reszta planszy jest spowita ciemnością. Zbieranie informacji jest kluczem do zwycięstwa.
+- ❤️ **Król ma 5 żyć:** Król posiada pulę 5 punktów życia. Wejście na atakowane pole lub niemożność ucieczki przed szachem kosztuje 1 życie.
 - 🧛 **Wampiryzm:** Bicie figur przeciwnika przywraca Twojemu królowi punkty życia (maksymalnie do 5).
 - 🎯 **Ślepy Ostrzał (Blind Shot):** Figury dalekosiężne (Hetman, Wieża, Goniec) mogą "strzelać" w mgłę na oślep. Jeśli na ich drodze stoi wróg - zostaje zbity. Uwaga: sojusznicze jednostki blokują linię strzału!
 - 📡 **Pionki Radarowe:** Pionki wykrywają wrogów znajdujących się bezpośrednio przed nimi. Ostrzegają o niebezpieczeństwie, a bicie pionkiem jest dozwolone tylko wtedy, gdy cel jest widoczny dla gracza.
@@ -28,7 +28,7 @@ Projekt został zbudowany z wykorzystaniem nowoczesnego stosu technologicznego:
 - **Frontend:** React, Vite
 - **Backend:** Node.js, Socket.io
 - **Logika Szachowa:** Własny silnik rozszerzający możliwości biblioteki `chess.js`
-- **Design:** Czysty, nowoczesny CSS z wykorzystaniem zmiennych i animacji
+- **Design:** Czysty, nowoczesny CSS
 
 ## 🚀 Jak zacząć? (Uruchomienie lokalnie)
 
@@ -65,5 +65,3 @@ Aplikacja będzie domyślnie dostępna pod adresem: `http://localhost:5173`
 4. Przeciwnik wybiera **"Dołącz do gry"** i wpisuje Twój kod.
 5. Rozpoczyna się bitwa we mgle! 
 
----
-*Zaprojektowane i zakodowane z pasją do szachów i nowoczesnego web developmentu.*
