@@ -3,11 +3,11 @@
  * 
  * 8×8 CSS Grid chessboard with fog of war rendering.
  * Handles click-based piece selection and move execution.
+ * Coordinate labels are rendered OUTSIDE the board grid.
  */
 
-import { useState, useCallback } from 'react';
 import Square from '../Square/Square.jsx';
-import { coordsToSquare } from '../../config/constants.js';
+import { coordsToSquare, FILES, RANKS } from '../../config/constants.js';
 import './Board.css';
 
 export default function Board({
@@ -27,6 +27,10 @@ export default function Board({
   onSquareClick,
 }) {
   const isFlipped = myColor === 'b';
+
+  // Etykiety plików i rangów uwzględniające obrот planszy
+  const fileLabels = isFlipped ? [...FILES].reverse() : FILES;
+  const rankLabels = isFlipped ? [...RANKS].reverse() : RANKS;
 
   const renderSquares = () => {
     const squares = [];
@@ -84,8 +88,27 @@ export default function Board({
         </span>
       </div>
 
-      <div className={boardClasses}>
-        {renderSquares()}
+      {/* Wrapper planszy z etykietami na zewnątrz */}
+      <div className="board-wrapper">
+        {/* Etykiety rangów (1–8) po lewej stronie */}
+        <div className="board__rank-labels">
+          {rankLabels.map(rank => (
+            <span key={rank} className="board__rank-label">{rank}</span>
+          ))}
+        </div>
+
+        <div className="board__inner">
+          <div className={boardClasses}>
+            {renderSquares()}
+          </div>
+
+          {/* Etykiety plików (a–h) pod planszy */}
+          <div className="board__file-labels">
+            {fileLabels.map(file => (
+              <span key={file} className="board__file-label">{file}</span>
+            ))}
+          </div>
+        </div>
       </div>
     </div>
   );

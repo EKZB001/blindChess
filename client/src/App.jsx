@@ -125,13 +125,14 @@ export default function App() {
   return (
     <div className="app">
       <header className="app__header">
-        <h1 className="app__title" onClick={leaveRoom} style={{ cursor: 'pointer' }}>
+        <h1 className="app__title">
           <span className="text-gradient">♟ Blind Chess</span>
           <span className="app__subtitle">
             Pokój: {roomId} {isSpectator ? '' : `| Twój kolor: ${myColor === 'w' ? 'Białe' : 'Czarne'}`}
           </span>
         </h1>
       </header>
+
 
       {isSpectator && (
         <div className="spectator-banner">

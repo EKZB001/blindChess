@@ -6,7 +6,6 @@
  */
 
 import Piece from '../Piece/Piece.jsx';
-import { FILES, RANKS } from '../../config/constants.js';
 import './Square.css';
 
 export default function Square({
@@ -27,8 +26,6 @@ export default function Square({
   onClick,
 }) {
   const isLight = (row + col) % 2 === 0;
-  const showCoordFile = row === 7;
-  const showCoordRank = col === 0;
 
   const classNames = [
     'square',
@@ -46,22 +43,13 @@ export default function Square({
 
   return (
     <div
-      id={`square-${FILES[col]}${RANKS[row]}`}
       className={classNames}
       onClick={onClick}
       role="button"
       tabIndex={0}
-      aria-label={`${FILES[col]}${RANKS[row]}${piece ? ` - ${piece.color === 'w' ? 'biały' : 'czarny'} ${piece.type}` : ''}`}
     >
       {isVisible && piece && (
         <Piece piece={piece} isRevealed={isRevealed} />
-      )}
-
-      {showCoordFile && (
-        <span className="square__file-label">{FILES[col]}</span>
-      )}
-      {showCoordRank && (
-        <span className="square__rank-label">{RANKS[row]}</span>
       )}
     </div>
   );

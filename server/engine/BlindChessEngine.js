@@ -189,25 +189,31 @@ export class BlindChessEngine {
       return this._getPawnMoves(square, piece, board);
     }
 
-    // King logic — bypasses chess.js check validation
+    // Król — wylicza wszystkie dostępne pola geometrycznie, bez filtrowania check przez chess.js
     if (piece.type === PIECE_TYPES.KING) {
       return this._getKingMoves(square, piece, board);
     }
 
-    // Knights — standard chess.js moves
+    // Skoczek — wylicza własną geometrią (nie przez chess.moves, które podczas szacha filtruje ruchy)
+    // Dzięki temu gracz może próbować DOWOLNEGO ruchu, a kara życiowa wystąpi przy wykonaniu
+    if (piece.type === PIECE_TYPES.KNIGHT) {
+      return this._getKnightMoves(square, piece, board);
+    }
+
+    // Pozostałe bierki standardowe (fallback - nie powinno wystąpić)
     const standardMoves = this.chess.moves({ square, verbose: true });
     return standardMoves.map(m => m.to);
   }
 
   /**
-   * Generates king moves, specifically allowing attempts to move to checked/occupied squares.
-   * If a move is illegal under chess rules (like moving into check), the life penalty
-   * is handled when executing the move.
+   * Generates king moves manually (bypasses chess.js check-filtering).
+   * The king may attempt any adjacent square not occupied by a friendly piece.
+   * Illegal moves (into check) are penalised at execution time.
    */
   _getKingMoves(square, piece, board) {
     const moves = [];
     const { row, col } = squareToCoords(square);
-    const directions = [...DIRECTIONS.QUEEN]; // King moves 1 square in all 8 directions
+    const directions = [...DIRECTIONS.QUEEN];
 
     for (const dir of directions) {
       const r = row + dir.dr;
@@ -215,7 +221,6 @@ export class BlindChessEngine {
 
       if (isInBounds(r, c)) {
         const targetPiece = board[r][c];
-        // Can attempt move if empty or occupied by enemy
         if (!targetPiece || targetPiece.color !== piece.color) {
           moves.push(coordsToSquare(r, c));
         }
@@ -227,6 +232,36 @@ export class BlindChessEngine {
     for (const m of chessMoves) {
       if (m.flags.includes('c') || m.flags.includes('k') || m.flags.includes('q')) {
         if (!moves.includes(m.to)) moves.push(m.to);
+      }
+    }
+
+    return moves;
+  }
+
+  /**
+   * Generates knight moves manually — bypasses chess.js check-filtering.
+   * During check the player must still be allowed to TRY any knight move;
+   * if it doesn’t resolve check the penalty is applied at execution time.
+   */
+  _getKnightMoves(square, piece, board) {
+    const moves = [];
+    const { row, col } = squareToCoords(square);
+    const knightDeltas = [
+      { dr: -2, dc: -1 }, { dr: -2, dc: 1 },
+      { dr: -1, dc: -2 }, { dr: -1, dc: 2 },
+      { dr:  1, dc: -2 }, { dr:  1, dc: 2 },
+      { dr:  2, dc: -1 }, { dr:  2, dc: 1 },
+    ];
+
+    for (const { dr, dc } of knightDeltas) {
+      const r = row + dr;
+      const c = col + dc;
+      if (isInBounds(r, c)) {
+        const target = board[r][c];
+        // Dopuszczamy puste pola i pola z figurą przeciwnika
+        if (!target || target.color !== piece.color) {
+          moves.push(coordsToSquare(r, c));
+        }
       }
     }
 
@@ -344,7 +379,42 @@ export class BlindChessEngine {
     }
   }
 
-  // ─── Move Execution ─────────────────────────────────────────────
+  /**
+   * Generate all geometrically reachable knight moves.
+   * Does NOT filter for check resolution — any move is allowed,
+   * and the engine penalises the player at execution time if check remains.
+   *
+   * @param {string} square
+   * @param {object} piece
+   * @param {Array} board
+   * @returns {string[]}
+   */
+  _getKnightMoves(square, piece, board) {
+    const { row, col } = squareToCoords(square);
+    const moves = [];
+    const offsets = [
+      [-2, -1], [-2, 1],
+      [-1, -2], [-1, 2],
+      [ 1, -2], [ 1, 2],
+      [ 2, -1], [ 2, 1],
+    ];
+
+    for (const [dr, dc] of offsets) {
+      const r = row + dr;
+      const c = col + dc;
+      if (isInBounds(r, c)) {
+        const target = board[r][c];
+        // Dozwolony ruch jeśli pole puste lub zajęte przez wrogą bierkę
+        if (!target || target.color !== piece.color) {
+          moves.push(coordsToSquare(r, c));
+        }
+      }
+    }
+
+    return moves;
+  }
+
+
 
   /**
    * Execute a move in Blind Chess.
@@ -471,7 +541,7 @@ export class BlindChessEngine {
         }
       }
 
-      // Handle capture vampirism
+      // Pomyślnie wykonano ruch króla
       let capturedPiece = null;
       if (moveResult.captured) {
         capturedPiece = { type: moveResult.captured, color: enemyColor };
@@ -483,16 +553,23 @@ export class BlindChessEngine {
 
       return { success: true, notifications: this.notifications, capturedPiece, moveData: moveResult };
     } catch {
-      // chess.js rejected the move — king tried to move into danger
-      if (!kingValidation.valid) {
+      // chess.js odrzucił ruch króla.
+      // Przypadek 1: gracz był w szachu — każdy ruch nieprowadzący do wyjścia ze szacha to -1 życie.
+      if (inCheck) {
+        const lifeResult = this.kingLives.loseLife(color);
+        this._addNotification('danger', 'Ruch nie zdjął szacha! -1 życie.');
+        this._addNotification('life', `♔ Życia: ${lifeResult.livesRemaining}/${MAX_KING_LIVES}`);
+        if (lifeResult.isDead) {
+          this._setGameOver(color === COLORS.WHITE ? GAME_RESULT.WHITE_KING_DEAD : GAME_RESULT.BLACK_KING_DEAD);
+        }
+      } else if (!kingValidation.valid) {
+        // Przypadek 2: brak szacha, król wszedł na atakowane pole — standardowa kara
         const lifeResult = this.kingLives.loseLife(color);
         this._addNotification('danger', kingValidation.reason);
         this._addNotification('life', `♔ Życia: ${lifeResult.livesRemaining}/${MAX_KING_LIVES}`);
 
-        // Flash-reveal the attacker's square
         if (kingValidation.revealSquare) {
           this.flashReveal = { square: to };
-          // Temporarily reveal for the enemy
           if (targetPiece) {
             this.fogManager[color].addReveal(to, 1);
           }
@@ -502,6 +579,7 @@ export class BlindChessEngine {
           this._setGameOver(color === COLORS.WHITE ? GAME_RESULT.WHITE_KING_DEAD : GAME_RESULT.BLACK_KING_DEAD);
         }
       } else {
+        // Przypadek 3: ruch geometrycznie nieprawidłowy (np. próba roszady w złych warunkach)
         this._addNotification('error', 'Niedozwolony ruch króla.');
       }
 
@@ -679,7 +757,17 @@ export class BlindChessEngine {
 
       return { success: true, notifications: this.notifications, capturedPiece, moveData: moveResult };
     } catch {
-      this._addNotification('error', 'Niedozwolony ruch pionka.');
+      // chess.js odrzucił ruch — jeśli gracz był w szachu, to kara życiowa
+      if (inCheck) {
+        const lifeResult = this.kingLives.loseLife(color);
+        this._addNotification('danger', 'Ruch nie zdjął szacha! -1 życie.');
+        this._addNotification('life', `♔ Życia: ${lifeResult.livesRemaining}/${MAX_KING_LIVES}`);
+        if (lifeResult.isDead) {
+          this._setGameOver(color === COLORS.WHITE ? GAME_RESULT.WHITE_KING_DEAD : GAME_RESULT.BLACK_KING_DEAD);
+        }
+      } else {
+        this._addNotification('error', 'Niedozwolony ruch pionka.');
+      }
       return { success: false, notifications: this.notifications, capturedPiece: null, moveData: null };
     }
   }
@@ -690,6 +778,7 @@ export class BlindChessEngine {
     try {
       const moveResult = this.chess.move({ from, to });
 
+      // Ruch zaakceptowany przez chess.js — sprawdzamy czy zdjął szacha
       if (inCheck) {
         const escape = validateCheckEscape(this.chess, color);
         if (!escape.resolved) {
@@ -718,7 +807,17 @@ export class BlindChessEngine {
 
       return { success: true, notifications: this.notifications, capturedPiece, moveData: moveResult };
     } catch {
-      this._addNotification('error', 'Niedozwolony ruch.');
+      // chess.js odrzucił ruch — jeśli gracz był w szachu, to kara życiowa
+      if (inCheck) {
+        const lifeResult = this.kingLives.loseLife(color);
+        this._addNotification('danger', 'Ruch nie zdjął szacha! -1 życie.');
+        this._addNotification('life', `♔ Życia: ${lifeResult.livesRemaining}/${MAX_KING_LIVES}`);
+        if (lifeResult.isDead) {
+          this._setGameOver(color === COLORS.WHITE ? GAME_RESULT.WHITE_KING_DEAD : GAME_RESULT.BLACK_KING_DEAD);
+        }
+      } else {
+        this._addNotification('error', 'Niedozwolony ruch.');
+      }
       return { success: false, notifications: this.notifications, capturedPiece: null, moveData: null };
     }
   }

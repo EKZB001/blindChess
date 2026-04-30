@@ -36,6 +36,16 @@
 .square--fog {
   background-color: var(--color-fog) !important;
   cursor: default;
+  /* Subtelny wzór planszy widoczny pod mgłą */
+  outline: 1px solid rgba(255, 255, 255, 0.03);
+}
+
+.square--light.square--fog {
+  background-color: rgba(30, 42, 62, 0.5) !important;
+}
+
+.square--dark.square--fog {
+  background-color: rgba(15, 22, 40, 0.5) !important;
 }
 
 .square--fog::after {
@@ -43,8 +53,7 @@
   position: absolute;
   inset: 0;
   background:
-    radial-gradient(circle at 30% 40%, rgba(30, 40, 60, 0.3) 0%, transparent 60%),
-    radial-gradient(circle at 70% 60%, rgba(20, 30, 50, 0.2) 0%, transparent 50%);
+    radial-gradient(circle at 50% 50%, rgba(5, 10, 20, 0.35) 0%, transparent 70%);
   pointer-events: none;
 }
 
@@ -122,34 +131,3 @@
               inset 0 0 20px rgba(239, 68, 68, 0.2);
 }
 
-/* ── Coordinate Labels ── */
-.square__file-label,
-.square__rank-label {
-  position: absolute;
-  font-family: var(--font-mono);
-  font-size: 0.6rem;
-  font-weight: 600;
-  opacity: 0.4;
-  pointer-events: none;
-  user-select: none;
-}
-
-.square__file-label {
-  bottom: 2px;
-  right: 4px;
-}
-
-.square__rank-label {
-  top: 2px;
-  left: 4px;
-}
-
-.square--light .square__file-label,
-.square--light .square__rank-label {
-  color: var(--color-square-dark);
-}
-
-.square--dark .square__file-label,
-.square--dark .square__rank-label {
-  color: var(--color-square-light);
-}

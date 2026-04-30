@@ -85,3 +85,59 @@
   cursor: default !important;
 }
 
+/* ── Board Coordinate Labels (outside the grid) ── */
+.board-wrapper {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 4px;
+}
+
+.board__inner {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.board__rank-labels {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-around;
+  height: calc(var(--square-size) * 8);
+  padding: 2px 0;
+}
+
+.board__rank-label {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  text-align: center;
+  width: 14px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: var(--square-size);
+}
+
+.board__file-labels {
+  display: flex;
+  flex-direction: row;
+  justify-content: space-around;
+  width: calc(var(--square-size) * 8);
+  padding: 0 2px;
+}
+
+.board__file-label {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  text-align: center;
+  width: var(--square-size);
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
